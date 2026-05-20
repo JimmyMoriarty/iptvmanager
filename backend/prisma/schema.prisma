@@ -1,0 +1,255 @@
+// =====================================================
+// IPTV Manager - Prisma Schema
+// =====================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---- Users & Auth ----
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  username      String    @unique @db.VarChar(50)
+  email         String    @unique @db.VarChar(255)
+  passwordHash  String    @map("password_hash") @db.VarChar(255)
+  role          UserRole  @default(ADMIN)
+  isActive      Boolean   @default(true) @map("is_active")
+  totpSecret    String?   @map("totp_secret") @db.VarChar(512)
+  totpEnabled   Boolean   @default(false) @map("totp_enabled")
+  failedLogins  Int       @default(0) @map("failed_logins")
+  lockedUntil   DateTime? @map("locked_until")
+  lastLoginAt   DateTime? @map("last_login_at")
+  lastLoginIp   String?   @map("last_login_ip") @db.VarChar(45)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  sessions      Session[]
+  loginHistory  LoginHistory[]
+  playlists     Playlist[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  VIEWER
+
+  @@map("user_role")
+}
+
+model Session {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  refreshToken  String   @unique @map("refresh_token") @db.VarChar(512)
+  userAgent     String?  @map("user_agent") @db.VarChar(512)
+  ipAddress     String?  @map("ip_address") @db.VarChar(45)
+  expiresAt     DateTime @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshToken])
+  @@map("sessions")
+}
+
+model LoginHistory {
+  id          String        @id @default(uuid()) @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  ipAddress   String        @map("ip_address") @db.VarChar(45)
+  userAgent   String?       @map("user_agent") @db.VarChar(512)
+  status      LoginStatus
+  reason      String?       @db.VarChar(255)
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("login_history")
+}
+
+enum LoginStatus {
+  SUCCESS
+  FAILED_PASSWORD
+  FAILED_TOTP
+  ACCOUNT_LOCKED
+  ACCOUNT_DISABLED
+
+  @@map("login_status")
+}
+
+// ---- Playlists ----
+
+model Playlist {
+  id              String          @id @default(uuid()) @db.Uuid
+  name            String          @db.VarChar(255)
+  sourceUrl       String          @map("source_url") @db.VarChar(2048)
+  description     String?         @db.Text
+  isEnabled       Boolean         @default(true) @map("is_enabled")
+  autoRefresh     Boolean         @default(true) @map("auto_refresh")
+  refreshInterval Int             @default(360) @map("refresh_interval") // minutes
+  lastFetchedAt   DateTime?       @map("last_fetched_at")
+  lastFetchStatus FetchStatus?    @map("last_fetch_status")
+  lastFetchError  String?         @map("last_fetch_error") @db.Text
+  channelCount    Int             @default(0) @map("channel_count")
+  ownerId         String          @map("owner_id") @db.Uuid
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  owner           User            @relation(fields: [ownerId], references: [id])
+  channels        Channel[]
+  tags            PlaylistTag[]
+  outputSources   OutputSource[]
+
+  @@index([ownerId])
+  @@index([isEnabled])
+  @@map("playlists")
+}
+
+enum FetchStatus {
+  SUCCESS
+  FAILED
+  TIMEOUT
+  INVALID_FORMAT
+  SSRF_BLOCKED
+
+  @@map("fetch_status")
+}
+
+model PlaylistTag {
+  id         String   @id @default(uuid()) @db.Uuid
+  playlistId String   @map("playlist_id") @db.Uuid
+  tag        String   @db.VarChar(100)
+
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, tag])
+  @@index([tag])
+  @@map("playlist_tags")
+}
+
+// ---- Channels ----
+
+model Channel {
+  id              String        @id @default(uuid()) @db.Uuid
+  playlistId      String        @map("playlist_id") @db.Uuid
+  name            String        @db.VarChar(500)
+  streamUrl       String        @map("stream_url") @db.VarChar(2048)
+  groupTitle      String?       @map("group_title") @db.VarChar(255)
+  tvgId           String?       @map("tvg_id") @db.VarChar(255)
+  tvgName         String?       @map("tvg_name") @db.VarChar(500)
+  tvgLogo         String?       @map("tvg_logo") @db.VarChar(2048)
+  tvgCountry      String?       @map("tvg_country") @db.VarChar(10)
+  tvgLanguage     String?       @map("tvg_language") @db.VarChar(100)
+  duration        Int           @default(-1)
+  isEnabled       Boolean       @default(true) @map("is_enabled")
+  healthStatus    HealthStatus  @default(UNKNOWN) @map("health_status")
+  lastCheckedAt   DateTime?     @map("last_checked_at")
+  failureCount    Int           @default(0) @map("failure_count")
+  httpStatus      Int?          @map("http_status")
+  responseTimeMs  Int?          @map("response_time_ms")
+  contentType     String?       @map("content_type") @db.VarChar(255)
+  rawExtinf       String?       @map("raw_extinf") @db.Text
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  playlist        Playlist      @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@index([playlistId])
+  @@index([groupTitle])
+  @@index([healthStatus])
+  @@index([isEnabled])
+  @@index([streamUrl])
+  @@map("channels")
+}
+
+enum HealthStatus {
+  WORKING
+  SLOW
+  DEAD
+  UNKNOWN
+
+  @@map("health_status")
+}
+
+// ---- Generated Outputs ----
+
+model GeneratedOutput {
+  id              String         @id @default(uuid()) @db.Uuid
+  name            String         @db.VarChar(255)
+  slug            String         @unique @db.VarChar(255)
+  token           String         @unique @db.VarChar(255)
+  description     String?        @db.Text
+  isEnabled       Boolean        @default(true) @map("is_enabled")
+  filterGroups    String[]       @map("filter_groups")
+  filterSearch    String?        @map("filter_search") @db.VarChar(500)
+  excludeGroups   String[]       @map("exclude_groups")
+  excludeDead     Boolean        @default(true) @map("exclude_dead")
+  sortOrder       SortOrder      @default(NAME_ASC) @map("sort_order")
+  maxChannels     Int?           @map("max_channels")
+  epgUrl          String?        @map("epg_url") @db.VarChar(2048)
+  tokenExpiresAt  DateTime?      @map("token_expires_at")
+  accessCount     Int            @default(0) @map("access_count")
+  lastAccessedAt  DateTime?      @map("last_accessed_at")
+  lastAccessIp    String?        @map("last_access_ip") @db.VarChar(45)
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  sources         OutputSource[]
+
+  @@index([slug])
+  @@index([token])
+  @@map("generated_outputs")
+}
+
+enum SortOrder {
+  NAME_ASC
+  NAME_DESC
+  GROUP_ASC
+  GROUP_DESC
+  ORIGINAL
+
+  @@map("sort_order")
+}
+
+model OutputSource {
+  id             String          @id @default(uuid()) @db.Uuid
+  outputId       String          @map("output_id") @db.Uuid
+  playlistId     String          @map("playlist_id") @db.Uuid
+  priority       Int             @default(0)
+
+  output         GeneratedOutput @relation(fields: [outputId], references: [id], onDelete: Cascade)
+  playlist       Playlist        @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@unique([outputId, playlistId])
+  @@map("output_sources")
+}
+
+// ---- Audit Log ----
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String?  @map("user_id") @db.Uuid
+  action      String   @db.VarChar(100)
+  resource    String   @db.VarChar(100)
+  resourceId  String?  @map("resource_id") @db.VarChar(255)
+  details     Json?
+  ipAddress   String?  @map("ip_address") @db.VarChar(45)
+  userAgent   String?  @map("user_agent") @db.VarChar(512)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

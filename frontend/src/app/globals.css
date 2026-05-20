@@ -1,0 +1,191 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-surface-900 text-slate-100 font-sans antialiased;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.12) 0%, transparent 60%);
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-surface-900;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-700 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-600;
+  }
+}
+
+@layer components {
+  /* Cards */
+  .card {
+    @apply bg-surface-800 border border-white/[0.06] rounded-xl p-5;
+    backdrop-filter: blur(12px);
+  }
+
+  .card-glass {
+    @apply rounded-xl p-5 border border-white/[0.08];
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(20px);
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium
+           text-sm transition-all duration-200 focus:outline-none focus:ring-2
+           focus:ring-offset-2 focus:ring-offset-surface-900 disabled:opacity-50
+           disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-brand-600 hover:bg-brand-500 text-white focus:ring-brand-500
+           shadow-lg shadow-brand-600/20 hover:shadow-brand-500/30;
+  }
+
+  .btn-secondary {
+    @apply btn bg-surface-700 hover:bg-surface-700/80 text-slate-200
+           border border-white/[0.08] focus:ring-slate-500;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-600/20 hover:bg-red-600/30 text-red-400
+           border border-red-500/20 focus:ring-red-500;
+  }
+
+  .btn-ghost {
+    @apply btn hover:bg-white/5 text-slate-400 hover:text-slate-200 focus:ring-slate-500;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+
+  /* Form inputs */
+  .input {
+    @apply w-full px-4 py-2.5 bg-surface-800 border border-white/[0.08]
+           rounded-lg text-sm text-slate-200 placeholder-slate-500
+           focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/50
+           transition-colors duration-200;
+  }
+
+  .input-label {
+    @apply block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-working {
+    @apply badge bg-emerald-500/15 text-emerald-400 border border-emerald-500/20;
+  }
+
+  .badge-dead {
+    @apply badge bg-red-500/15 text-red-400 border border-red-500/20;
+  }
+
+  .badge-slow {
+    @apply badge bg-amber-500/15 text-amber-400 border border-amber-500/20;
+  }
+
+  .badge-unknown {
+    @apply badge bg-slate-500/15 text-slate-400 border border-slate-500/20;
+  }
+
+  /* Stat cards */
+  .stat-card {
+    @apply card flex flex-col gap-3;
+  }
+
+  .stat-value {
+    @apply text-3xl font-bold text-white;
+  }
+
+  .stat-label {
+    @apply text-sm text-slate-400;
+  }
+
+  /* Table */
+  .table-wrapper {
+    @apply overflow-x-auto rounded-xl border border-white/[0.06];
+  }
+
+  .table {
+    @apply w-full text-sm;
+  }
+
+  .table thead {
+    @apply bg-surface-800/50;
+  }
+
+  .table th {
+    @apply px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider;
+  }
+
+  .table tbody tr {
+    @apply border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors;
+  }
+
+  .table td {
+    @apply px-4 py-3 text-slate-300;
+  }
+
+  /* Sidebar nav */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+           text-slate-400 hover:text-slate-200 hover:bg-white/[0.05]
+           transition-all duration-150 cursor-pointer;
+  }
+
+  .nav-item-active {
+    @apply text-white bg-brand-600/20 border border-brand-500/20;
+  }
+
+  /* Glow effects */
+  .glow-brand {
+    box-shadow: 0 0 60px rgba(99, 102, 241, 0.15);
+  }
+
+  /* Dot indicators */
+  .dot-working { @apply w-2 h-2 rounded-full bg-emerald-400; }
+  .dot-dead { @apply w-2 h-2 rounded-full bg-red-400; }
+  .dot-slow { @apply w-2 h-2 rounded-full bg-amber-400; }
+  .dot-unknown { @apply w-2 h-2 rounded-full bg-slate-400; }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-brand-400 to-purple-400 bg-clip-text text-transparent;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+}

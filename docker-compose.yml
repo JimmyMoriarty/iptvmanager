@@ -1,0 +1,234 @@
+# =====================================================
+# IPTV Manager - Docker Compose (Production)
+# =====================================================
+# Usage: docker compose up -d
+# =====================================================
+
+services:
+  # ---- PostgreSQL ----
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/src/database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+
+  # ---- Redis ----
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 64mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --save 60 1000
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 96M
+    security_opt:
+      - no-new-privileges:true
+
+  # ---- NestJS Backend API ----
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - JWT_ACCESS_EXPIRY=${JWT_ACCESS_EXPIRY}
+      - JWT_REFRESH_EXPIRY=${JWT_REFRESH_EXPIRY}
+      - JWT_PLAYLIST_SECRET=${JWT_PLAYLIST_SECRET}
+      - TOTP_ISSUER=${TOTP_ISSUER}
+      - TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - COOKIE_DOMAIN=${COOKIE_DOMAIN}
+      - COOKIE_SECURE=${COOKIE_SECURE}
+      - CORS_ORIGIN=${CORS_ORIGIN}
+      - RATE_LIMIT_TTL=${RATE_LIMIT_TTL}
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX}
+      - LOGIN_MAX_ATTEMPTS=${LOGIN_MAX_ATTEMPTS}
+      - LOGIN_LOCK_DURATION=${LOGIN_LOCK_DURATION}
+      - BCRYPT_ROUNDS=${BCRYPT_ROUNDS}
+      - FETCH_TIMEOUT_MS=${FETCH_TIMEOUT_MS}
+      - FETCH_MAX_SIZE_MB=${FETCH_MAX_SIZE_MB}
+      - FETCH_MAX_REDIRECTS=${FETCH_MAX_REDIRECTS}
+      - HEALTH_CHECK_CONCURRENCY=${HEALTH_CHECK_CONCURRENCY}
+      - HEALTH_CHECK_TIMEOUT_MS=${HEALTH_CHECK_TIMEOUT_MS}
+      - HEALTH_CHECK_INTERVAL_MINUTES=${HEALTH_CHECK_INTERVAL_MINUTES}
+      - WORKER_CONCURRENCY=${WORKER_CONCURRENCY}
+      - LOG_LEVEL=${LOG_LEVEL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+      - /app/logs:size=32M
+
+  # ---- BullMQ Worker ----
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - FETCH_TIMEOUT_MS=${FETCH_TIMEOUT_MS}
+      - FETCH_MAX_SIZE_MB=${FETCH_MAX_SIZE_MB}
+      - FETCH_MAX_REDIRECTS=${FETCH_MAX_REDIRECTS}
+      - HEALTH_CHECK_CONCURRENCY=${HEALTH_CHECK_CONCURRENCY}
+      - HEALTH_CHECK_TIMEOUT_MS=${HEALTH_CHECK_TIMEOUT_MS}
+      - HEALTH_CHECK_INTERVAL_MINUTES=${HEALTH_CHECK_INTERVAL_MINUTES}
+      - HEALTH_CHECK_RETRY_COUNT=${HEALTH_CHECK_RETRY_COUNT}
+      - HEALTH_CHECK_AUTO_DISABLE_AFTER=${HEALTH_CHECK_AUTO_DISABLE_AFTER}
+      - WORKER_CONCURRENCY=${WORKER_CONCURRENCY}
+      - LOG_LEVEL=${LOG_LEVEL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+      - /app/logs:size=32M
+
+  # ---- Next.js Frontend ----
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://iptv.kukey.com/api
+    depends_on:
+      - api
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+
+  # ---- NGINX Reverse Proxy ----
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+      - certbot_webroot:/var/www/certbot:ro
+      - certbot_certs:/etc/letsencrypt:ro
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - internal
+      - external
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    security_opt:
+      - no-new-privileges:true
+
+  # ---- Certbot (SSL) ----
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot_webroot:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'"
+    networks:
+      - external
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  certbot_webroot:
+    driver: local
+  certbot_certs:
+    driver: local
+
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  external:
+    driver: bridge
