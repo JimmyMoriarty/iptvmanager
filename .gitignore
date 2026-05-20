@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.next/
+.env
+*.log
+logs/
+data/postgres/
+data/redis/
+.DS_Store
+coverage/
+.turbo/
